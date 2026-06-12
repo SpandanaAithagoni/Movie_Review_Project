@@ -4,93 +4,65 @@ import pandas as pd
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.datasets import imdb
 
-# ------------------------------
-# PAGE CONFIG
-# ------------------------------
-
 st.set_page_config(
     page_title="Movie Review Sentiment Analysis",
     page_icon="🎬",
     layout="wide"
 )
 
-# ------------------------------
-# CUSTOM CSS
-# ------------------------------
-
 st.markdown("""
 <style>
-
-.stApp {
-    background-color: #0f1117;
+.stApp{
+    background-color:#0f1117;
 }
-
-h1,h2,h3,h4,h5,h6,p,label {
-    color: white !important;
+h1,h2,h3,h4,h5,h6,p,label{
+    color:white !important;
 }
-
-.stTextArea textarea {
-    background-color: #1e1e1e !important;
-    color: white !important;
+.stTextArea textarea{
+    background-color:#1e1e1e !important;
+    color:white !important;
 }
-
-.stButton > button {
-    width: 100%;
-    background-color: #00d4ff;
-    color: black;
-    font-size: 18px;
-    font-weight: bold;
+.stButton>button{
+    width:100%;
+    background-color:#00d4ff;
+    color:black;
+    font-size:18px;
+    font-weight:bold;
 }
-
 </style>
 """, unsafe_allow_html=True)
 
-# ------------------------------
-# LOAD MODELS
-# ------------------------------
-
 @st.cache_resource
 def load_models():
+    models = {}
 
-    rnn = tf.keras.models.load_model("rnn_model.keras")
-    lstm = tf.keras.models.load_model("lstm_model.keras")
-    gru = tf.keras.models.load_model("gru_model.keras")
+    try:
+        models["SimpleRNN"] = tf.keras.models.load_model("rnn_model.keras")
+    except:
+        models["SimpleRNN"] = None
 
-    return rnn, lstm, gru
+    try:
+        models["LSTM"] = tf.keras.models.load_model("lstm_model.keras")
+    except:
+        models["LSTM"] = None
 
-rnn_model, lstm_model, gru_model = load_models()
+    try:
+        models["GRU"] = tf.keras.models.load_model("gru_model.keras")
+    except:
+        models["GRU"] = None
 
-# ------------------------------
-# IMDB WORD INDEX
-# ------------------------------
+    return models
+
+models = load_models()
 
 word_index = imdb.get_word_index()
-
 max_length = 200
 
-# ------------------------------
-# TEXT TO SEQUENCE
-# ------------------------------
-
 def text_to_sequence(text):
-
     words = text.lower().split()
-
-    sequence = []
-
-    for word in words:
-        sequence.append(
-            word_index.get(word, 2)
-        )
-
-    return sequence
-
-# ------------------------------
-# PREDICTION
-# ------------------------------
+    return [word_index.get(word, 2) for word in words]
 
 def predict_sentiment(model, text):
-
     seq = text_to_sequence(text)
 
     padded = pad_sequences(
@@ -113,134 +85,112 @@ def predict_sentiment(model, text):
 
     return sentiment, float(score)
 
-# ------------------------------
-# HEADER
-# ------------------------------
+st.title("🎬 Movie Review Sentiment Analysis")
+st.subheader("Deep Learning Based Sentiment Classification")
 
-st.title("🎬 Movie Review Sentiment Analysis System")
-
-st.subheader(
-    "Deep Learning Based Sentiment Classification"
-)
-
-# ------------------------------
-# SIDEBAR
-# ------------------------------
+st.sidebar.title("Model Selection")
 
 selected_model = st.sidebar.radio(
     "Choose Model",
-    [
-        "SimpleRNN",
-        "LSTM",
-        "GRU"
-    ]
+    ["SimpleRNN", "LSTM", "GRU"]
 )
 
-# ------------------------------
-# INPUT
-# ------------------------------
+st.sidebar.subheader("Model Status")
+
+for model_name, model_obj in models.items():
+    if model_obj is not None:
+        st.sidebar.success(f"{model_name} Loaded")
+    else:
+        st.sidebar.error(f"{model_name} Missing")
 
 review = st.text_area(
-    "Enter your movie review here...",
+    "Enter Movie Review",
     height=180
 )
 
-# ------------------------------
-# PREDICT
-# ------------------------------
+examples = [
+    "This movie was amazing and I loved every minute of it.",
+    "The film was boring and a complete waste of time.",
+    "Excellent acting and fantastic storyline.",
+    "Terrible screenplay and poor direction."
+]
+
+st.subheader("Sample Reviews")
+
+for example in examples:
+    if st.button(example):
+        review = example
 
 if st.button("Analyze Review"):
 
     if review.strip() == "":
         st.warning("Please enter a review.")
-
     else:
 
-        if selected_model == "SimpleRNN":
-            sentiment, score = predict_sentiment(
-                rnn_model,
-                review
-            )
+        model = models[selected_model]
 
-        elif selected_model == "LSTM":
-            sentiment, score = predict_sentiment(
-                lstm_model,
-                review
-            )
-
+        if model is None:
+            st.error(f"{selected_model} model file not found.")
         else:
+
             sentiment, score = predict_sentiment(
-                gru_model,
+                model,
                 review
             )
 
-        st.success(
-            f"Sentiment: {sentiment}"
-        )
+            st.success(
+                f"Predicted Sentiment: {sentiment}"
+            )
 
-        st.write(
-            f"Confidence: {score*100:.2f}%"
-        )
+            st.metric(
+                "Confidence",
+                f"{score*100:.2f}%"
+            )
 
-        st.progress(float(score))
+            st.progress(float(score))
 
-        positive = score * 100
-        negative = (1-score) * 100
+            positive = score * 100
+            negative = (1 - score) * 100
 
-        chart_df = pd.DataFrame(
-            {
-                "Probability":[
-                    positive,
-                    negative
+            chart_df = pd.DataFrame(
+                {
+                    "Probability":[
+                        positive,
+                        negative
+                    ]
+                },
+                index=[
+                    "Positive",
+                    "Negative"
                 ]
-            },
-            index=[
-                "Positive",
-                "Negative"
-            ]
-        )
+            )
 
-        st.bar_chart(chart_df)
+            st.subheader("Prediction Probability")
 
-        st.subheader("Compare All Models")
+            st.bar_chart(chart_df)
 
-        rnn_sent, rnn_score = predict_sentiment(
-            rnn_model,
-            review
-        )
+            st.subheader("All Model Comparison")
 
-        lstm_sent, lstm_score = predict_sentiment(
-            lstm_model,
-            review
-        )
+            comparison = []
 
-        gru_sent, gru_score = predict_sentiment(
-            gru_model,
-            review
-        )
+            for model_name, model_obj in models.items():
 
-        comparison = pd.DataFrame({
+                if model_obj is not None:
 
-            "Model":[
-                "SimpleRNN",
-                "LSTM",
-                "GRU"
-            ],
+                    pred_sentiment, pred_score = predict_sentiment(
+                        model_obj,
+                        review
+                    )
 
-            "Sentiment":[
-                rnn_sent,
-                lstm_sent,
-                gru_sent
-            ],
+                    comparison.append(
+                        {
+                            "Model": model_name,
+                            "Sentiment": pred_sentiment,
+                            "Confidence": round(pred_score * 100, 2)
+                        }
+                    )
 
-            "Confidence":[
-                round(rnn_score*100,2),
-                round(lstm_score*100,2),
-                round(gru_score*100,2)
-            ]
-        })
-
-        st.dataframe(
-            comparison,
-            use_container_width=True
-        )
+            st.dataframe(
+                pd.DataFrame(comparison),
+                use_container_width=True
+            )
